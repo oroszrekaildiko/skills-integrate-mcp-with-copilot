@@ -3,6 +3,21 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const accountButton = document.getElementById("account-button");
+  const logoutButton = document.getElementById("logout-button");
+  const loginDialog = document.getElementById("login-dialog");
+  const loginForm = document.getElementById("login-form");
+  const cancelLogin = document.getElementById("cancel-login");
+  const studentAccessMessage = document.getElementById("student-access-message");
+  let isTeacher = false;
+
+  function updateAccessControls(authenticated) {
+    isTeacher = authenticated;
+    signupForm.classList.toggle("hidden", !authenticated);
+    studentAccessMessage.classList.toggle("hidden", authenticated);
+    accountButton.classList.toggle("hidden", authenticated);
+    logoutButton.classList.toggle("hidden", !authenticated);
+  }
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -28,10 +43,11 @@ document.addEventListener("DOMContentLoaded", () => {
               <h5>Participants:</h5>
               <ul class="participants-list">
                 ${details.participants
-                  .map(
-                    (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
-                  )
+                  .map((email) => `<li><span class="participant-email">${email}</span>${
+                    isTeacher
+                      ? `<button class="delete-btn" data-activity="${name}" data-email="${email}">Remove</button>`
+                      : ""
+                  }</li>`)
                   .join("")}
               </ul>
             </div>`
@@ -155,6 +171,43 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  accountButton.addEventListener("click", () => loginDialog.showModal());
+  cancelLogin.addEventListener("click", () => loginDialog.close());
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const response = await fetch("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("username").value,
+        password: document.getElementById("password").value,
+      }),
+    });
+    const result = await response.json();
+    if (response.ok) {
+      updateAccessControls(true);
+      loginForm.reset();
+      loginDialog.close();
+      fetchActivities();
+    } else {
+      messageDiv.textContent = result.detail || "Unable to log in";
+      messageDiv.className = "error";
+      messageDiv.classList.remove("hidden");
+    }
+  });
+
+  logoutButton.addEventListener("click", async () => {
+    await fetch("/auth/logout", { method: "POST" });
+    updateAccessControls(false);
+    fetchActivities();
+  });
+
   // Initialize app
-  fetchActivities();
+  fetch("/auth/session")
+    .then((response) => response.json())
+    .then((session) => {
+      updateAccessControls(session.authenticated);
+      fetchActivities();
+    });
 });
